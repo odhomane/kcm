@@ -30,9 +30,6 @@ var (
 			Foreground(lipgloss.Color("#A3BE8C")).
 			Bold(true)
 
-	styleInactive = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#D8DEE9"))
-
 	stylePinned = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#EBCB8B"))
 
@@ -52,17 +49,13 @@ var (
 	styleErr = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#BF616A")).
 			Bold(true)
-
-	styleOK = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#A3BE8C"))
 )
 
 // ─── Context item (list.Item implementation) ──────────────────────────────────
 
 type contextItem struct {
-	ci       core.ContextInfo
-	meta     store.ContextMeta
-	selected bool
+	ci   core.ContextInfo
+	meta store.ContextMeta
 }
 
 func (c contextItem) Title() string {
@@ -109,12 +102,11 @@ const (
 )
 
 type model struct {
-	mgr      *core.Manager
-	st       *store.Store
-	op       *ops.Ops
-	list     list.Model
-	detail   string
-	state    state
+	mgr   *core.Manager
+	st    *store.Store
+	op    *ops.Ops
+	list  list.Model
+	state state
 	input    textinput.Model
 	inputCtx string // context being operated on
 	err      string

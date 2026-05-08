@@ -52,7 +52,7 @@ func newDeleteCmd() *cobra.Command {
 			if !yes {
 				fmt.Printf("Delete context %q? [y/N] ", args[0])
 				var resp string
-				fmt.Scanln(&resp)
+				_, _ = fmt.Scanln(&resp)
 				if strings.ToLower(resp) != "y" {
 					fmt.Println("Aborted.")
 					return nil
