@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" x-data="app()" x-init="init()">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,228 +7,340 @@
   <link rel="stylesheet" href="/static/style.css" />
   <script src="/static/alpine.min.js" defer></script>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-mono">
+<body x-data="app()" x-init="init()" @keydown.meta.k.window.prevent="openSearch()" @keydown.ctrl.k.window.prevent="openSearch()" @keydown.escape.window="closeAll()">
 
-<!-- Top bar -->
-<header class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-4">
-  <span class="text-blue-400 font-bold text-lg">⎈ kcm</span>
-  <span class="text-gray-500 text-sm">Kubeconfig Manager</span>
+<div class="layout">
 
-  <div class="ml-auto flex items-center gap-3">
+  <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <a class="topbar-brand" href="#">
+      <div class="logo-icon">⎈</div>
+      <span>kcm</span>
+    </a>
+
+    <div class="topbar-divider"></div>
+
     <!-- Quick search trigger -->
-    <button @click="showSearch = true"
-            class="text-sm text-gray-400 border border-gray-700 rounded px-3 py-1 hover:border-blue-500 flex items-center gap-2">
-      <span>Search contexts</span>
-      <kbd class="text-xs text-gray-600">⌘K</kbd>
-    </button>
-
-    <!-- Current context badge -->
-    <template x-if="currentCtx">
-      <span class="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded" x-text="currentCtx"></span>
-    </template>
-  </div>
-</header>
-
-<div class="flex flex-1 overflow-hidden">
-
-  <!-- Sidebar -->
-  <aside class="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
-    <nav class="p-3 space-y-1 flex-1 overflow-y-auto">
-      <p class="text-xs text-gray-600 uppercase tracking-wider mb-2">Files</p>
-      <template x-for="f in files" :key="f.path">
-        <button @click="filterFile = (filterFile === f.path ? '' : f.path)"
-                :class="filterFile === f.path ? 'bg-blue-900 text-blue-200' : 'text-gray-400 hover:bg-gray-800'"
-                class="w-full text-left text-xs px-2 py-1.5 rounded truncate block"
-                :title="f.path">
-          <span x-text="shortPath(f.path)"></span>
-          <span class="text-gray-600 ml-1" x-text="'(' + f.contexts + ')'"></span>
-        </button>
-      </template>
-
-      <p class="text-xs text-gray-600 uppercase tracking-wider mt-4 mb-2">Groups</p>
-      <template x-for="g in groupList" :key="g">
-        <button @click="filterGroup = (filterGroup === g ? '' : g)"
-                :class="filterGroup === g ? 'bg-blue-900 text-blue-200' : 'text-gray-400 hover:bg-gray-800'"
-                class="w-full text-left text-xs px-2 py-1.5 rounded">
-          <span x-text="g"></span>
-        </button>
-      </template>
-
-      <p class="text-xs text-gray-600 uppercase tracking-wider mt-4 mb-2">Pinned</p>
-      <template x-for="c in pinned" :key="c.name">
-        <button @click="switchCtx(c.name)"
-                class="w-full text-left text-xs px-2 py-1.5 rounded text-yellow-400 hover:bg-gray-800 truncate"
-                x-text="c.name"></button>
-      </template>
-    </nav>
-  </aside>
-
-  <!-- Main content -->
-  <main class="flex-1 overflow-auto p-6">
-
-    <!-- Filter bar -->
-    <div class="flex items-center gap-3 mb-4">
-      <input x-model="search"
-             @input.debounce.200ms="loadContexts()"
-             class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm flex-1 max-w-sm focus:outline-none focus:border-blue-500"
-             placeholder="Filter contexts..." />
-      <label class="flex items-center gap-1.5 text-xs text-gray-400">
-        <input type="checkbox" x-model="pinnedOnly" @change="loadContexts()" class="accent-yellow-400" />
-        Pinned only
-      </label>
-      <span class="text-xs text-gray-600" x-text="contexts.length + ' contexts'"></span>
+    <div class="topbar-search" @click="openSearch()">
+      <span class="filter-icon">🔍</span>
+      <input readonly placeholder="Search contexts..." />
+      <span class="search-kbd">⌘K</span>
     </div>
 
-    <!-- Context table -->
-    <div class="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-      <table class="w-full text-sm">
+    <div class="topbar-right">
+      <!-- Current context badge -->
+      <div class="ctx-badge" x-show="currentCtx" x-cloak>
+        <span class="dot"></span>
+        <span class="truncate" x-text="currentCtx" style="max-width:220px"></span>
+      </div>
+
+      <!-- Theme toggle -->
+      <button class="theme-btn" @click="toggleTheme()" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+        <span x-text="theme === 'dark' ? '☀️' : '🌙'"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <p class="sidebar-section-label">Kubeconfigs</p>
+    <template x-for="f in files" :key="f.path">
+      <div class="sidebar-item"
+           :class="filterFile === f.path ? 'active' : ''"
+           @click="filterFile = filterFile === f.path ? '' : f.path; loadContexts()">
+        <span class="icon">📄</span>
+        <span class="truncate" :title="f.path" x-text="shortPath(f.path)" style="flex:1"></span>
+        <span class="badge" x-text="f.contexts"></span>
+      </div>
+    </template>
+
+    <p class="sidebar-section-label" x-show="groupList.length > 0">Groups</p>
+    <template x-for="g in groupList" :key="g">
+      <div class="sidebar-item"
+           :class="filterGroup === g ? 'active' : ''"
+           @click="filterGroup = filterGroup === g ? '' : g; loadContexts()">
+        <span class="icon">🗂</span>
+        <span x-text="g" style="flex:1"></span>
+        <span class="badge" x-text="groupCount(g)"></span>
+      </div>
+    </template>
+
+    <p class="sidebar-section-label" x-show="pinned.length > 0">Pinned</p>
+    <template x-for="c in pinned" :key="c.name">
+      <div class="sidebar-item" @click="switchCtx(c.name)" :title="c.name">
+        <span class="icon">⭐</span>
+        <span class="truncate" x-text="c.name" style="flex:1;font-family:var(--font-mono);font-size:11px"></span>
+      </div>
+    </template>
+  </aside>
+
+  <!-- ── Main content ────────────────────────────────────────────────────── -->
+  <main class="main">
+    <div class="page-header">
+      <h1 class="page-title">Contexts</h1>
+      <span class="page-subtitle" x-text="'Kubeconfig Manager v{{.Version}}'"></span>
+      <div class="ml-auto flex gap-2">
+        <button class="btn btn-ghost" @click="checkHealth()" title="Check all clusters">
+          ⚡ Health check
+        </button>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="filter-input">
+        <span class="filter-icon">🔍</span>
+        <input x-model="search" @input.debounce.200ms="loadContexts()" placeholder="Filter by name, cluster, server…" />
+      </div>
+      <label class="toggle-label">
+        <input type="checkbox" x-model="pinnedOnly" @change="loadContexts()" />
+        Pinned only
+      </label>
+      <span x-show="filterGroup || filterFile" style="font-size:12px;color:var(--accent)">
+        Filtered ·
+        <a @click="clearFilters()" style="cursor:pointer;text-decoration:underline">clear</a>
+      </span>
+      <span class="count-label" x-text="contexts.length + ' context' + (contexts.length !== 1 ? 's' : '')"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+      <table>
         <thead>
-          <tr class="border-b border-gray-800 text-xs text-gray-500 uppercase">
-            <th class="px-4 py-2 text-left">Name</th>
-            <th class="px-4 py-2 text-left">Cluster</th>
-            <th class="px-4 py-2 text-left">Namespace</th>
-            <th class="px-4 py-2 text-left">Group</th>
-            <th class="px-4 py-2 text-left">Cloud</th>
-            <th class="px-4 py-2 text-left">Last Used</th>
-            <th class="px-4 py-2 text-right">Actions</th>
+          <tr>
+            <th style="width:28px;padding-right:0"></th>
+            <th @click="sortBy('name')">
+              Name <span class="sort-icon" x-text="sortField==='name' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
+            </th>
+            <th @click="sortBy('cluster')">
+              Cluster <span class="sort-icon" x-text="sortField==='cluster' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
+            </th>
+            <th>Namespace</th>
+            <th>Group</th>
+            <th>Cloud</th>
+            <th @click="sortBy('lastUsed')">
+              Last Used <span class="sort-icon" x-text="sortField==='lastUsed' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
+            </th>
+            <th style="text-align:right">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <template x-for="c in contexts" :key="c.name">
-            <tr @click="openDetail(c)"
-                :class="c.current ? 'bg-blue-950' : 'hover:bg-gray-800'"
-                class="border-b border-gray-800/50 cursor-pointer transition-colors">
-              <td class="px-4 py-2.5">
-                <span class="text-green-400 mr-1" x-show="c.current">✔</span>
-                <span class="text-yellow-400 mr-1" x-show="c.pinned">★</span>
-                <span :class="c.color ? 'text-' + c.color + '-300' : 'text-gray-100'" x-text="c.name"></span>
+          <template x-for="c in sortedContexts" :key="c.name">
+            <tr @click="openDetail(c)" :class="c.current ? 'current-row' : ''">
+              <!-- Status dot -->
+              <td style="padding-right:0;width:28px">
+                <span class="indicator" :class="c.current ? 'current' : c.pinned ? 'pinned' : 'none'" title="current">
+                  <span class="dot"></span>
+                </span>
               </td>
-              <td class="px-4 py-2.5 text-gray-400 text-xs truncate max-w-32" x-text="c.cluster"></td>
-              <td class="px-4 py-2.5 text-gray-400 text-xs" x-text="c.namespace || '—'"></td>
-              <td class="px-4 py-2.5">
-                <template x-if="c.group">
-                  <span class="text-xs bg-gray-800 text-blue-300 px-1.5 py-0.5 rounded" x-text="c.group"></span>
+
+              <!-- Name -->
+              <td class="td-name">
+                <span class="name-text" :title="c.name" x-text="c.name"></span>
+                <span x-show="c.pinned" style="font-size:10px;color:var(--yellow);margin-left:4px">★</span>
+              </td>
+
+              <!-- Cluster -->
+              <td class="td-mono" :title="c.cluster" x-text="c.cluster || '—'"></td>
+
+              <!-- Namespace -->
+              <td>
+                <span x-show="c.namespace" class="badge badge-gray" x-text="c.namespace"></span>
+                <span x-show="!c.namespace" class="td-dim">—</span>
+              </td>
+
+              <!-- Group -->
+              <td>
+                <span x-show="c.group" class="badge badge-blue" x-text="c.group"></span>
+                <span x-show="!c.group" class="td-dim">—</span>
+              </td>
+
+              <!-- Cloud -->
+              <td>
+                <template x-if="c.cloudProvider">
+                  <span class="cloud-chip">
+                    <span x-text="cloudIcon(c.cloudProvider)"></span>
+                    <span x-text="c.cloudProvider + (c.cloudRegion ? ' · ' + c.cloudRegion : '')"></span>
+                  </span>
                 </template>
+                <span x-show="!c.cloudProvider" class="td-dim">—</span>
               </td>
-              <td class="px-4 py-2.5 text-xs text-gray-500">
-                <span x-text="c.cloudProvider ? (c.cloudProvider + (c.cloudRegion ? ' / ' + c.cloudRegion : '')) : ''"></span>
-              </td>
-              <td class="px-4 py-2.5 text-xs text-gray-600" x-text="c.lastUsed ? fmtDate(c.lastUsed) : '—'"></td>
-              <td class="px-4 py-2.5 text-right">
-                <div class="flex items-center justify-end gap-1" @click.stop>
-                  <button @click="switchCtx(c.name)"
-                          class="text-xs px-2 py-1 bg-blue-800 hover:bg-blue-700 rounded transition-colors"
-                          title="Switch context">Use</button>
-                  <button @click="openDetail(c)"
-                          class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-                          title="View details">···</button>
+
+              <!-- Last used -->
+              <td class="td-dim" x-text="c.lastUsed ? fmtDate(c.lastUsed) : '—'"></td>
+
+              <!-- Actions -->
+              <td @click.stop>
+                <div class="actions-cell">
+                  <button class="btn btn-primary" @click="switchCtx(c.name)">Use</button>
+                  <button class="btn-icon btn" @click="openDetail(c)" title="Details">···</button>
                 </div>
               </td>
             </tr>
           </template>
-          <tr x-show="contexts.length === 0">
-            <td colspan="7" class="px-4 py-8 text-center text-gray-600">
-              No contexts found. Try adjusting your filters or
-              <button @click="search=''; filterGroup=''; loadContexts()" class="text-blue-400 underline">clear filters</button>.
+
+          <!-- Empty state -->
+          <tr x-show="sortedContexts.length === 0">
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">⎈</div>
+                <p>No contexts match your filters.</p>
+                <a @click="clearFilters(); search=''; loadContexts()">Clear all filters</a>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
   </main>
-
-  <!-- Detail drawer -->
-  <aside x-show="selected"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="translate-x-full"
-         x-transition:enter-end="translate-x-0"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="translate-x-0"
-         x-transition:leave-end="translate-x-full"
-         class="w-96 bg-gray-900 border-l border-gray-800 overflow-y-auto flex flex-col shrink-0">
-    <template x-if="selected">
-      <div class="p-4">
-        <div class="flex items-start justify-between mb-4">
-          <h2 class="font-bold text-base" x-text="selected.name"></h2>
-          <button @click="selected = null" class="text-gray-600 hover:text-gray-300 text-lg leading-none">✕</button>
-        </div>
-
-        <!-- Detail fields -->
-        <dl class="space-y-2 text-sm">
-          <template x-for="[k,v] in detailFields()" :key="k">
-            <div class="flex gap-2">
-              <dt class="text-gray-500 w-24 shrink-0" x-text="k + ':'"></dt>
-              <dd class="text-gray-200 break-all" x-text="v"></dd>
-            </div>
-          </template>
-        </dl>
-
-        <!-- Actions -->
-        <div class="mt-6 space-y-2">
-          <button @click="switchCtx(selected.name)"
-                  class="w-full text-sm py-2 bg-blue-700 hover:bg-blue-600 rounded transition-colors">
-            Switch to this context
-          </button>
-
-          <div class="flex gap-2">
-            <button @click="promptRename()"
-                    class="flex-1 text-sm py-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors">
-              Rename
-            </button>
-            <button @click="exportCtx(selected.name)"
-                    class="flex-1 text-sm py-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors">
-              Export
-            </button>
-            <button @click="togglePin()"
-                    :class="selected.pinned ? 'text-yellow-300 bg-yellow-900/30' : 'bg-gray-700'"
-                    class="text-sm py-2 px-3 hover:bg-gray-600 rounded transition-colors">
-              ★
-            </button>
-          </div>
-
-          <div class="flex gap-2 items-center mt-2">
-            <input x-model="groupInput" class="flex-1 text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500" placeholder="Set group..." />
-            <button @click="setGroup()" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded">Set</button>
-          </div>
-
-          <button @click="deleteCtx(selected.name)"
-                  class="w-full text-sm py-2 bg-red-900/40 hover:bg-red-800 text-red-300 rounded transition-colors mt-4">
-            Delete context
-          </button>
-        </div>
-      </div>
-    </template>
-  </aside>
 </div>
 
-<!-- Quick search modal -->
-<div x-show="showSearch"
-     @keydown.escape.window="showSearch = false"
-     class="fixed inset-0 bg-black/70 flex items-start justify-center pt-24 z-50">
-  <div class="w-full max-w-lg bg-gray-900 rounded-lg border border-gray-700 shadow-2xl overflow-hidden" @click.stop>
-    <input x-model="quickSearch"
-           x-ref="quickInput"
-           @input="filterQuick()"
-           class="w-full bg-transparent px-4 py-3 text-base focus:outline-none border-b border-gray-700"
-           placeholder="Search contexts..." />
-    <ul class="max-h-80 overflow-y-auto">
-      <template x-for="c in quickResults" :key="c.name">
-        <li @click="switchCtx(c.name); showSearch = false"
-            class="px-4 py-2.5 hover:bg-gray-800 cursor-pointer flex items-center gap-2 text-sm">
-          <span class="text-green-400" x-show="c.current">✔</span>
-          <span x-text="c.name" class="flex-1"></span>
-          <span class="text-xs text-gray-500" x-text="c.cluster"></span>
-        </li>
+<!-- ── Detail drawer ────────────────────────────────────────────────────────── -->
+<template x-if="selected">
+  <div>
+    <div class="drawer-overlay" @click="selected = null"></div>
+    <div class="drawer">
+      <div class="drawer-header">
+        <div>
+          <div class="drawer-title" x-text="selected.name"></div>
+          <div class="drawer-subtitle">
+            <span x-show="selected.current" class="badge badge-green" style="margin-right:4px">active</span>
+            <span x-show="selected.pinned" class="badge badge-yellow" style="margin-right:4px">pinned</span>
+            <span x-text="selected.source"></span>
+          </div>
+        </div>
+        <button class="btn-icon btn" @click="selected = null">✕</button>
+      </div>
+
+      <div class="drawer-body">
+        <!-- Connection -->
+        <div class="field-group">
+          <div class="field-group-title">Connection</div>
+          <div class="field-row"><span class="field-key">Cluster</span><span class="field-val" x-text="selected.cluster || '—'"></span></div>
+          <div class="field-row"><span class="field-key">User</span><span class="field-val" x-text="selected.user || '—'"></span></div>
+          <div class="field-row"><span class="field-key">Server</span><span class="field-val truncate" :title="selected.server" x-text="selected.server || '—'"></span></div>
+          <div class="field-row"><span class="field-key">Namespace</span><span class="field-val" x-text="selected.namespace || '(default)'"></span></div>
+        </div>
+
+        <!-- Metadata -->
+        <div class="field-group">
+          <div class="field-group-title">Metadata</div>
+          <div class="field-row"><span class="field-key">Group</span><span class="field-val" x-text="selected.group || '—'"></span></div>
+          <div class="field-row"><span class="field-key">Color</span><span class="field-val" x-text="selected.color || '—'"></span></div>
+          <div class="field-row" x-show="selected.cloudProvider">
+            <span class="field-key">Cloud</span>
+            <span class="field-val" x-text="(selected.cloudProvider||'') + (selected.cloudRegion ? ' / '+selected.cloudRegion : '')"></span>
+          </div>
+          <div class="field-row" x-show="selected.lastUsed">
+            <span class="field-key">Last used</span>
+            <span class="field-val" x-text="selected.lastUsed ? fmtDateFull(selected.lastUsed) : '—'"></span>
+          </div>
+          <template x-if="selected.labels && Object.keys(selected.labels).length">
+            <div class="field-row">
+              <span class="field-key">Labels</span>
+              <div class="field-val flex gap-2" style="flex-wrap:wrap">
+                <template x-for="[k,v] in Object.entries(selected.labels)" :key="k">
+                  <span class="badge badge-gray" x-text="k+'='+v"></span>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Edit group -->
+        <div class="field-group">
+          <div class="field-group-title">Set Group</div>
+          <div class="inline-form">
+            <input class="input" x-model="groupInput" placeholder="e.g. production" @keydown.enter="setGroup()" />
+            <button class="btn btn-ghost" @click="setGroup()">Save</button>
+          </div>
+        </div>
+
+        <!-- Health -->
+        <div class="field-group" x-show="healthResult">
+          <div class="field-group-title">Health</div>
+          <div class="field-row">
+            <span class="field-key">Status</span>
+            <span :class="healthResult?.ok ? 'badge badge-green' : 'badge badge-red'"
+                  x-text="healthResult?.ok ? 'Reachable' : 'Unreachable'"></span>
+          </div>
+          <div class="field-row" x-show="healthResult?.latency">
+            <span class="field-key">Latency</span>
+            <span class="field-val" x-text="healthResult?.latency"></span>
+          </div>
+          <div class="field-row" x-show="healthResult?.err">
+            <span class="field-key">Error</span>
+            <span class="field-val" style="color:var(--red);word-break:break-all" x-text="healthResult?.err"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <button class="btn btn-primary" style="width:100%" @click="switchCtx(selected.name)">
+          ⎈ Switch to this context
+        </button>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost" style="flex:1" @click="promptRename()">✏️ Rename</button>
+          <button class="btn btn-ghost" style="flex:1" @click="exportCtx(selected.name)">⬇️ Export</button>
+          <button class="btn btn-ghost" @click="togglePin()"
+                  :style="selected.pinned ? 'color:var(--yellow)' : ''">
+            <span x-text="selected.pinned ? '★ Unpin' : '☆ Pin'"></span>
+          </button>
+        </div>
+        <button class="btn btn-danger" style="width:100%;margin-top:4px"
+                @click="deleteCtx(selected.name)">
+          🗑 Delete context
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ── Quick switcher modal ──────────────────────────────────────────────────── -->
+<div class="modal-overlay" x-show="showSearch" x-cloak @click="showSearch = false">
+  <div class="modal" @click.stop>
+    <div class="modal-search">
+      <span style="color:var(--text-muted)">🔍</span>
+      <input x-ref="searchInput"
+             x-model="quickSearch"
+             @input="filterQuick()"
+             @keydown.arrow-down.prevent="quickIdx = Math.min(quickIdx+1, quickResults.length-1)"
+             @keydown.arrow-up.prevent="quickIdx = Math.max(quickIdx-1, 0)"
+             @keydown.enter="quickSelect()"
+             placeholder="Search contexts…" />
+      <span class="kbd">ESC</span>
+    </div>
+    <div class="modal-results">
+      <template x-for="(c, i) in quickResults" :key="c.name">
+        <div class="modal-result"
+             :class="{ highlighted: i === quickIdx }"
+             @click="switchCtx(c.name); showSearch = false"
+             @mouseenter="quickIdx = i">
+          <span class="dot" style="width:7px;height:7px;border-radius:50%;flex-shrink:0"
+                :style="c.current ? 'background:var(--green)' : 'background:var(--border)'"></span>
+          <span class="result-name" x-text="c.name"></span>
+          <span class="result-cluster" x-text="c.cluster"></span>
+          <span x-show="c.group" class="badge badge-blue" style="font-size:10px" x-text="c.group"></span>
+        </div>
       </template>
-    </ul>
+      <div class="modal-empty" x-show="quickResults.length === 0">
+        No contexts found for "<span x-text="quickSearch"></span>"
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="modal-hint"><span class="kbd">↑↓</span> navigate</span>
+      <span class="modal-hint"><span class="kbd">↵</span> select</span>
+      <span class="modal-hint"><span class="kbd">ESC</span> close</span>
+    </div>
   </div>
 </div>
 
-<!-- Notification toast -->
-<div x-show="toast"
-     x-transition
-     class="fixed bottom-4 right-4 bg-gray-800 border border-gray-700 text-sm px-4 py-2 rounded shadow-lg"
-     x-text="toast"></div>
+<!-- ── Toast container ───────────────────────────────────────────────────────── -->
+<div class="toast-container">
+  <template x-for="t in toasts" :key="t.id">
+    <div class="toast" :class="t.type" x-text="t.msg"></div>
+  </template>
+</div>
 
 <script src="/static/app.js"></script>
 </body>
